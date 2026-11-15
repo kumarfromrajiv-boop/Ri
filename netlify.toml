@@ -1,0 +1,92 @@
+Projects
+task-automation-f0890f
+Switch projects
+Agent runs
+Runner details
+
+Website for task automation based on user-provided URLs and instructions
+
+
+
+Showing 19 changed files with 2651 additions and 0 deletions.
+Unified
+Split
+
+.gitignore
+added
++5
+
+AGENTS.md
+added
++11
+
+README.md
+added
++29
+
+db/client.mjs
+added
++13
+import { drizzle } from 'drizzle-orm/netlify-db';
+import { sql } from 'drizzle-orm';
+// Initialize lazily so importing a function never opens a database connection.
+let database;
+export function getStore() {
+  database ??= drizzle();
+  return {
+    async sql(strings, ...values) {
+      const result = await database.execute(sql(strings, ...values));
+      return result.rows;
+    },
+  };
+}
+
+db/index.ts
+added
++3
+import { drizzle } from 'drizzle-orm/netlify-db';
+import * as schema from './schema.js';
+export const db = drizzle({ schema });
+
+db/schema.ts
+added
++16
+import { pgTable, text, timestamp, uuid, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+export const jobs = pgTable('jobs', {
+  id: uuid().primaryKey(),
+  owner: uuid().notNull(),
+  url: text().notNull(),
+  instruction: text().notNull(),
+  runtime: text().notNull(),
+  status: text().notNull(),
+  message: text().notNull(),
+  plan: text(),
+  result: text(),
+  dispatchHash: text('dispatch_hash'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [uniqueIndex('one_active_job').on(sql`(1)`).where(sql`${table.status} IN ('queued', 'running')`)]);
+
+drizzle.config.ts
+added
++2
+import { defineConfig } from 'drizzle-kit';
+export default defineConfig({ dialect: 'postgresql', schema: './db/schema.ts', out: 'netlify/database/migrations' });
+
+netlify.toml
+added
++13
+[build]
+  publish = "public"
+[build.environment]
+  NODE_VERSION = "24"
+[functions]
+  node_bundler = "esbuild"
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "same-origin"
+    X-Frame-Options = "DENY"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
